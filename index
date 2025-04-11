@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Voice-Based Mark Summarizer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      text-align: center;
+      background: #f5f7fa;
+    }
+    h1 {
+      margin-bottom: 1rem;
+    }
+    button {
+      padding: 1rem 2rem;
+      margin: 1rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 10px;
+      background-color: #15ff00ab;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #15ff00ab;
+    }
+    .output {
+      font-size: 1.3rem;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Voice Number Sum Calculator</h1>
+
+  <button onclick="startListening()">🎙️ Start Speaking Marks</button>
+  <button onclick="stopListening()">⛔ Stop Listening</button>
+  <button onclick="readAloud()">🔊 Read Aloud</button>
+  <button onclick="resetAll()">🔄 Reset</button>
+
+  <div class="output">
+    Inputs: <br><strong id="numbers">None</strong>
+  </div>
+  <div class="output">
+    Total: <strong id="sum">0</strong>
+  </div>
+
+  <script>
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.continuous = true; // Keeps listening through pauses
+
+    let numbers = [];
+
+    recognition.onresult = function(event) {
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcript = event.results[i][0].transcript;
+        const spokenNumbers = transcript.match(/\d+/g);
+        if (spokenNumbers) {
+          const newNumbers = spokenNumbers.map(Number);
+          numbers.push(...newNumbers);
+          updateDisplay();
+        }
+      }
+    };
+
+    recognition.onerror = function(event) {
+      alert('Speech Recognition Error: ' + event.error);
+    };
+
+    function startListening() {
+      recognition.start();
+    }
+
+    function stopListening() {
+      recognition.stop();
+    }
+
+    function updateDisplay() {
+      document.getElementById('numbers').textContent = numbers.join(', ');
+      document.getElementById('sum').textContent = numbers.reduce((a, b) => a + b, 0);
+    }
+
+    function readAloud() {
+      if (numbers.length === 0) {
+        alert("No marks to read.");
+        return;
+      }
+
+      const msg = new SpeechSynthesisUtterance("Marks entered are: " + numbers.join(", "));
+      window.speechSynthesis.speak(msg);
+    }
+
+    function resetAll() {
+      numbers = [];
+      updateDisplay();
+    }
+  </script>
+
+</body>
+</html>
