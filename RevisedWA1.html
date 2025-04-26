@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Teacher Voice Mark Adder</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #f0f8ff;
+      color: #333;
+    } 
+    h1 {
+      color: #2b6cb0;
+    }
+    .number-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 1rem 0;
+    }
+    .number-list input {
+      width: 60px;
+      padding: 0.5rem;
+      text-align: center;
+      border: 2px solid #a0aec0;
+      border-radius: 6px;
+      background-color: #e6fffa;
+    }
+    button {
+      margin: 0.5rem;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      cursor: pointer;
+      border: none;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+      color: white;
+    }
+    #toggle-btn {
+      background-color: #38a169;
+    }
+    #toggle-btn.listening {
+      background-color: #e53e3e;
+    }
+    #read-btn {
+      background-color: #ecc94b;
+      color: black;
+    }
+    #toggle-btn:hover:not(.listening) {
+      background-color: #2f855a;
+    }
+    #toggle-btn.listening:hover {
+      background-color: #c53030;
+    }
+    #read-btn:hover {
+      background-color: #d69e2e;
+    }
+    h2 {
+      margin-top: 1rem;
+      color: #38a169;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mark Adder (Voice Input)</h1>
+
+  <button id="toggle-btn">Start</button>
+  <button id="read-btn">🔊 Read Aloud</button>
+
+  <div class="number-list" id="number-list"></div>
+
+  <h2>Total: <span id="total">0</span></h2>
+
+  <script>
+    const toggleBtn = document.getElementById("toggle-btn");
+    const readBtn = document.getElementById("read-btn");
+    const numberList = document.getElementById("number-list");
+    const totalDisplay = document.getElementById("total");
+
+    let isListening = false;
+    let mediaRecorder;
+    let audioChunks = [];
+
+    async function startRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = event => {
+          audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          audioChunks = [];
+
+          const formData = new FormData();
+          formData.append('audio', audioBlob, 'speech.webm');
+
+          const response = await fetch('http://localhost:3000/transcribe', {
+            method: 'POST',
+            body: formData
+          });
+
+          const data = await response.json();
+          const numbers = data.transcript.match(/\d+/g);
+          if (numbers) {
+            numbers.forEach(num => addNumber(num));
+          }
+        };
+
+        mediaRecorder.start();
+      } catch (err) {
+        console.error('Error accessing microphone:', err);
+        alert('Could not access microphone. Please allow permission.');
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+    }
+
+    function updateTotal() {
+      const inputs = document.querySelectorAll(".number-list input");
+      let total = 0;
+      inputs.forEach(input => {
+        const val = parseInt(input.value);
+        if (!isNaN(val)) total += val;
+      });
+      totalDisplay.textContent = total;
+    }
+
+    function addNumber(num) {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.value = num;
+      input.addEventListener("input", updateTotal);
+      numberList.appendChild(input);
+      updateTotal();
+    }
+
+    toggleBtn.addEventListener("click", () => {
+      isListening = !isListening;
+      toggleBtn.textContent = isListening ? "Stop" : "Start";
+      toggleBtn.classList.toggle("listening", isListening);
+
+      if (isListening) {
+        startRecording();
+      } else {
+        stopRecording();
+      }
+    });
+
+    readBtn.addEventListener("click", async () => {
+      const values = Array.from(document.querySelectorAll(".number-list input"))
+        .map(input => input.value).filter(v => v !== "");
+      const text = `You entered: ${values.join(", ")}. Total is ${totalDisplay.textContent}`;
+
+      const response = await fetch('http://localhost:3000/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      const blob = await response.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      audio.play();
+    });
+  </script>
+</body>
+</html>
