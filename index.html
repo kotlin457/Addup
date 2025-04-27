@@ -101,7 +101,7 @@
           const formData = new FormData();
           formData.append('audio', audioBlob, 'speech.webm');
 
-          const response = await fetch('http://localhost:3000/transcribe', {
+          const response = await fetch('https://voice-backend-3lip.onrender.com/transcribe', {
             method: 'POST',
             body: formData
           });
@@ -162,7 +162,7 @@
         .map(input => input.value).filter(v => v !== "");
       const text = `You entered: ${values.join(", ")}. Total is ${totalDisplay.textContent}`;
 
-      const response = await fetch('http://localhost:3000/speak', {
+      const response = await fetch('https://voice-backend-3lip.onrender.com/speak', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })
