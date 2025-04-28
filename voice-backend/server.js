@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
+import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -50,28 +51,35 @@ app.post('/transcribe', upload.single('audio'), (req, res) => {
 });
 
 app.post('/speak', async (req, res) => {
-  const { text } = req.body;
-  const outputPath = path.join(__dirname, 'output.mp3');
+  try {
+    const { text } = req.body;
+    const outputPath = path.join(__dirname, 'output.mp3');
 
-  const gtts = new gTTS(text, 'en');
-  const writeStream = fs.createWriteStream(outputPath);
+    const gtts = new gTTS(text, 'en');
+    const writeStream = fs.createWriteStream(outputPath);
 
-  gtts.stream()
-    .pipe(writeStream)
-    .on('finish', () => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Content-Type', 'audio/mpeg');
-      const stream = fs.createReadStream(outputPath);
-      stream.pipe(res);
+    gtts.stream()
+      .pipe(writeStream)
+      .on('finish', () => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', 'audio/mpeg');
+        const stream = fs.createReadStream(outputPath);
+        stream.pipe(res);
 
-      stream.on('close', () => {
-        fs.unlinkSync(outputPath);
+        stream.on('close', () => {
+          fs.unlinkSync(outputPath);
+        });
+      })
+      .on('error', (err) => {
+        console.error('TTS error:', err);
+        res.setHeader('Access-Control-Allow-Origin', '*'); // still allow cors
+        res.status(500).send('TTS generation failed.');
       });
-    })
-    .on('error', (err) => {
-      console.error('TTS error:', err);
-      res.status(500).send('TTS generation failed.');
-    });
+  } catch (err) {
+    console.error('Unexpected error:', err);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.status(500).send('Server error.');
+  }
 });
 
 app.listen(port, () => {
