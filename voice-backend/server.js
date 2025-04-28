@@ -59,6 +59,7 @@ app.post('/speak', async (req, res) => {
   gtts.stream()
     .pipe(writeStream)
     .on('finish', () => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Content-Type', 'audio/mpeg');
       const stream = fs.createReadStream(outputPath);
       stream.pipe(res);
