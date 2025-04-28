@@ -2,177 +2,219 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Teacher Voice Mark Adder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mark Adder</title>
   <style>
     body {
-      font-family: sans-serif;
-      margin: 2rem;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f5f7fa;
       display: flex;
       flex-direction: column;
       align-items: center;
-      background: #f0f8ff;
+      padding: 20px;
       color: #333;
     }
     h1 {
-      color: #2b6cb0;
+      margin-bottom: 10px;
     }
-    .number-list {
+    .controls {
+      margin: 10px;
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin: 1rem 0;
-    }
-    .number-list input {
-      width: 60px;
-      padding: 0.5rem;
-      text-align: center;
-      border: 2px solid #a0aec0;
-      border-radius: 6px;
-      background-color: #e6fffa;
+      gap: 10px;
     }
     button {
-      margin: 0.5rem;
-      padding: 0.5rem 1rem;
-      font-size: 1rem;
-      cursor: pointer;
+      padding: 10px 15px;
+      background-color: #4caf50;
       border: none;
-      border-radius: 5px;
-      transition: background-color 0.3s ease;
       color: white;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.3s;
     }
-    #toggle-btn {
-      background-color: #38a169;
+    button:hover {
+      background-color: #45a049;
     }
-    #toggle-btn.listening {
-      background-color: #e53e3e;
+    #status {
+      margin: 10px;
+      font-weight: bold;
     }
-    #read-btn {
-      background-color: #ecc94b;
-      color: black;
+    #marks {
+      width: 300px;
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
-    #toggle-btn:hover:not(.listening) {
-      background-color: #2f855a;
+    .mark-input {
+      padding: 8px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
     }
-    #toggle-btn.listening:hover {
-      background-color: #c53030;
+    #total {
+      margin-top: 20px;
+      font-size: 24px;
+      font-weight: bold;
     }
-    #read-btn:hover {
-      background-color: #d69e2e;
-    }
-    h2 {
-      margin-top: 1rem;
-      color: #38a169;
+    .error {
+      color: red;
+      margin-top: 10px;
     }
   </style>
 </head>
 <body>
-  <h1>Mark Adder (Voice Input)</h1>
 
-  <button id="toggle-btn">Start</button>
-  <button id="read-btn">🔊 Read Aloud</button>
+  <h1>Mark Adder</h1>
 
-  <div class="number-list" id="number-list"></div>
+  <div class="controls">
+    <button onclick="startRecording()">Start</button>
+    <button onclick="stopRecording()">Stop</button>
+    <button onclick="readTotal()">Read Total</button>
+    <button onclick="clearMarks()">Clear All</button>
+  </div>
 
-  <h2>Total: <span id="total">0</span></h2>
+  <div id="status">Idle</div>
+
+  <div id="marks"></div>
+
+  <div id="total">Total: 0</div>
+
+  <div class="error" id="error"></div>
 
   <script>
-    const toggleBtn = document.getElementById("toggle-btn");
-    const readBtn = document.getElementById("read-btn");
-    const numberList = document.getElementById("number-list");
-    const totalDisplay = document.getElementById("total");
-
-    let isListening = false;
     let mediaRecorder;
     let audioChunks = [];
+    const marksDiv = document.getElementById('marks');
+    const totalDiv = document.getElementById('total');
+    const statusDiv = document.getElementById('status');
+    const errorDiv = document.getElementById('error');
 
     async function startRecording() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
 
-        mediaRecorder.ondataavailable = event => {
+        audioChunks = [];
+        mediaRecorder.ondataavailable = (event) => {
           audioChunks.push(event.data);
         };
 
         mediaRecorder.onstop = async () => {
           const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-          audioChunks = [];
-
           const formData = new FormData();
-          formData.append('audio', audioBlob, 'speech.webm');
+          formData.append('audio', audioBlob, 'input.webm');
 
-          const response = await fetch('https://voice-backend-3lip.onrender.com/transcribe', {
-            method: 'POST',
-            body: formData
-          });
+          statusDiv.textContent = 'Transcribing...';
 
-          const data = await response.json();
-          const numbers = data.transcript.match(/\d+/g);
-          if (numbers) {
-            numbers.forEach(num => addNumber(num));
+          try {
+            const response = await fetch('https://voice-backend-3lip.onrender.com/transcribe', {
+              method: 'POST',
+              body: formData
+            });
+
+            if (!response.ok) throw new Error('Failed to transcribe');
+
+            const data = await response.json();
+            handleTranscript(data.transcript);
+          } catch (err) {
+            errorDiv.textContent = 'Error: ' + err.message;
           }
+
+          statusDiv.textContent = 'Idle';
         };
 
         mediaRecorder.start();
+        statusDiv.textContent = 'Recording...';
+        errorDiv.textContent = '';
       } catch (err) {
-        console.error('Error accessing microphone:', err);
-        alert('Could not access microphone. Please allow permission.');
+        errorDiv.textContent = 'Error: ' + err.message;
       }
     }
 
     function stopRecording() {
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      if (mediaRecorder) {
         mediaRecorder.stop();
+        statusDiv.textContent = 'Processing...';
       }
     }
 
-    function updateTotal() {
-      const inputs = document.querySelectorAll(".number-list input");
-      let total = 0;
-      inputs.forEach(input => {
-        const val = parseInt(input.value);
-        if (!isNaN(val)) total += val;
-      });
-      totalDisplay.textContent = total;
+    function handleTranscript(text) {
+      const words = text.toLowerCase().split(/[\s,]+/);
+      let numbers = [];
+
+      for (let word of words) {
+        let num = wordToNumber(word);
+        if (!isNaN(num)) numbers.push(num);
+      }
+
+      if (numbers.length === 0) {
+        errorDiv.textContent = 'No valid numbers detected.';
+        return;
+      }
+
+      numbers.forEach(num => addMark(num));
     }
 
-    function addNumber(num) {
-      const input = document.createElement("input");
-      input.type = "number";
-      input.value = num;
-      input.addEventListener("input", updateTotal);
-      numberList.appendChild(input);
+    function addMark(value) {
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.value = value;
+      input.className = 'mark-input';
+      input.addEventListener('input', updateTotal);
+      marksDiv.appendChild(input);
       updateTotal();
     }
 
-    toggleBtn.addEventListener("click", () => {
-      isListening = !isListening;
-      toggleBtn.textContent = isListening ? "Stop" : "Start";
-      toggleBtn.classList.toggle("listening", isListening);
-
-      if (isListening) {
-        startRecording();
-      } else {
-        stopRecording();
-      }
-    });
-
-    readBtn.addEventListener("click", async () => {
-      const values = Array.from(document.querySelectorAll(".number-list input"))
-        .map(input => input.value).filter(v => v !== "");
-      const text = `You entered: ${values.join(", ")}. Total is ${totalDisplay.textContent}`;
-
-      const response = await fetch('https://voice-backend-3lip.onrender.com/speak', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
+    function updateTotal() {
+      const inputs = document.querySelectorAll('.mark-input');
+      let sum = 0;
+      inputs.forEach(input => {
+        const val = parseFloat(input.value);
+        if (!isNaN(val)) sum += val;
       });
-      const blob = await response.blob();
-      const audioUrl = URL.createObjectURL(blob);
-      const audio = new Audio(audioUrl);
-      audio.play();
-    });
+      totalDiv.textContent = 'Total: ' + sum.toFixed(2);
+    }
+
+    async function readTotal() {
+      const totalText = totalDiv.textContent;
+      try {
+        const response = await fetch('https://voice-backend-3lip.onrender.com/speak', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: totalText })
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch TTS');
+
+        const { url } = await response.json();
+        const audio = new Audio(url);
+        audio.play();
+      } catch (err) {
+        errorDiv.textContent = 'Error: ' + err.message;
+      }
+    }
+
+    function clearMarks() {
+      marksDiv.innerHTML = '';
+      totalDiv.textContent = 'Total: 0';
+    }
+
+    function wordToNumber(word) {
+      const map = {
+        'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4,
+        'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9,
+        'ten': 10, 'point': '.'
+      };
+      if (map[word] !== undefined) return map[word];
+
+      // Try parsing floats directly
+      const parsed = parseFloat(word);
+      if (!isNaN(parsed)) return parsed;
+
+      return NaN;
+    }
   </script>
+
 </body>
 </html>
-
