@@ -2,24 +2,19 @@ import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
 import { exec } from 'child_process';
+import { getAudioUrl } from 'google-tts-api';
 import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import gTTS from 'gtts.js';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
+const upload = multer({ dest: 'uploads/' });
 
 app.use(cors());
 app.use(express.json());
 
-const upload = multer({ dest: 'uploads/' });
-
+// Transcription endpoint
 app.post('/transcribe', upload.single('audio'), (req, res) => {
   const filePath = req.file.path;
   const outPath = `${filePath}.wav`;
@@ -40,8 +35,8 @@ app.post('/transcribe', upload.single('audio'), (req, res) => {
       });
 
       res.json({ transcript: transcript.text });
-    } catch (err) {
-      console.error('Transcription error:', err);
+    } catch (error) {
+      console.error('Transcription error:', error);
       res.status(500).send('Transcription failed.');
     } finally {
       fs.unlinkSync(filePath);
@@ -50,38 +45,19 @@ app.post('/transcribe', upload.single('audio'), (req, res) => {
   });
 });
 
+// Text-to-speech endpoint
 app.post('/speak', async (req, res) => {
+  const { text } = req.body;
+
   try {
-    const { text } = req.body;
-    const outputPath = path.join(__dirname, 'output.mp3');
-
-    const gtts = new gTTS(text, 'en');
-    const writeStream = fs.createWriteStream(outputPath);
-
-    gtts.stream()
-      .pipe(writeStream)
-      .on('finish', () => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', 'audio/mpeg');
-        const stream = fs.createReadStream(outputPath);
-        stream.pipe(res);
-
-        stream.on('close', () => {
-          fs.unlinkSync(outputPath);
-        });
-      })
-      .on('error', (err) => {
-        console.error('TTS error:', err);
-        res.setHeader('Access-Control-Allow-Origin', '*'); // still allow cors
-        res.status(500).send('TTS generation failed.');
-      });
+    const url = await getAudioUrl(text, { lang: 'en', slow: false });
+    res.json({ url });
   } catch (err) {
-    console.error('Unexpected error:', err);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.status(500).send('Server error.');
+    console.error('TTS error:', err);
+    res.status(500).send('TTS generation failed.');
   }
 });
 
 app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+  console.log(`Server running at port ${port}`);
 });
